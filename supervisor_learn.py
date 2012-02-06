@@ -1,4 +1,6 @@
+import os
 from numpy import *
+from argparse import ArgumentParser
 import pickle
 from scipy.sparse import lil_matrix
 from sklearn.svm.sparse import SVC
@@ -6,13 +8,18 @@ import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
+from vocab import create_vocab
 import logging
+import time
+from dbconfig import get_db_config
+
 log = logging.getLogger('super')
 hdlr = logging.FileHandler('super.log')
 log.addHandler(hdlr) 
 log.setLevel(logging.DEBUG)
 
-conn = psycopg2.connect(database="ml", user="sharmi", password="sherlock")
+user, password, dbname = get_db_config('db.cnf')
+conn = psycopg2.connect(database=dbname, user=user, password=password)
 cur = conn.cursor()
 SELECTSQL = "SELECT ds from  emailcache where email=%s;"
 
@@ -52,23 +59,27 @@ def load_emails(emailfile):
     return dict(emails)
 
 def grid_search(training_features, training_results, validation_features, validation_results):
-    gamma = [pow(2, -15), pow(2, -10), pow(2, -5), pow(2, -2), pow(2, 0), pow(2, 2), pow(2, 5)]
-    C = [pow(2, -5), pow(2, -2), pow(2, 0), pow(2, 2), pow(2, 5), pow(2, 10), pow(2, 15)]
+    gamma = [pow(2, -10), pow(2, -5), pow(2, -2), pow(2, 0), pow(2, 2)]
+    C = [pow(2, -5), pow(2, -2), pow(2, 0), pow(2, 2), pow(2, 5), pow(2, 10)]
     error_rates = []
     for g in gamma:
         for c in C:
+            log.info("Tracking gamma:%s C:%s " %(g, c))
             error_rate = classify(training_features, training_results, validation_features, validation_results, c, g)
-            print g, c, error_rate
             log.info("parameters gamma:%s C:%s Error Rate: %s" %(g, c, error_rate))
             error_rates.append((error_rate, g, c))
     error_rates.sort()
     return error_rates[0]
 
 def classify(features, results, test_features, test_results, C, gamma):
+    cli = "%s@%s" %(C, gamma) 
+    st = time.time()
     log.info("Classifier begins")
     classifier = SVC(C=C, gamma=gamma, kernel="rbf")
     classifier.fit(features, results)
+    st2 = time.time()
     prediction = classifier.predict(test_features)
+    log.info("id: %s Training time: %s, Prediction time: %s" %(cli, st2-st, time.time()-st2) )
     error = 0
     for index, value in enumerate(prediction):
         if test_results[index] != value:
@@ -76,23 +87,21 @@ def classify(features, results, test_features, test_results, C, gamma):
     return (error/float(len(test_results))) * 100
 
 
-def main():
-    training_emails = load_emails('datasets/supervised')
-    vocab = load_vocab('email.pkl')
+def main(datadir):
+    training_emails = load_emails(os.path.join(datadir, 'datasets/supervised'))
+    log.info("Size of training emails: %s" %len(training_emails))
+    vocab = create_vocab(training_emails)
+    log.info("Size of vocab = %s" %(len(vocab),))
     features = generate_features(training_emails, vocab)
     results = [ int(y=='spam') for x,y in training_emails.iteritems()]
 
-    #classifier.fit(features, results)
-    #classifier = SVC(C=1.0, kernel="rbf")
-    validation_emails = load_emails('datasets/supervised')
+    validation_emails = load_emails(os.path.join(datadir, 'datasets/validation'))
     validation_features = generate_features(validation_emails, vocab)
     validation_results = [ int(y=='spam') for x,y in validation_emails.iteritems()]
 
     log.info("Grid Search is about to begin") 
     error_rate, gamma, C = grid_search(features, results, validation_features, validation_results)
-    #C = 1
-    #gamma = 0.001
-    testing_emails = load_emails('datasets/test')
+    testing_emails = load_emails(os.path.join(datadir, 'datasets/test'))
     testing_features = generate_features(testing_emails, vocab)
     testing_results = [ int(y=='spam') for x,y in testing_emails.iteritems()]
     error_rate = classify(features, results, testing_features, testing_results, C, gamma)
@@ -111,4 +120,8 @@ def main():
         
 
 if __name__ == "__main__":
-    main()
+    parser = ArgumentParser()
+    parser.add_argument("datadir", help="The untarred trec data directory for example /path/to/trec05p-1")
+    args = parser.parse_args()
+    if args.datadir:
+        main(args.datadir)

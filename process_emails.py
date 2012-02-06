@@ -1,3 +1,4 @@
+import os.path
 from collections import defaultdict
 from emailextract import extract
 import nltk
@@ -7,13 +8,16 @@ import string
 import json
 from email.parser import FeedParser
 from email.Iterators import typed_subpart_iterator
+from argparse import ArgumentParser
 import pickle
 import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
+from dbconfig import get_db_config
 
-conn = psycopg2.connect(database="ml", user="sharmi", password="sherlock")
+user, password, dbname = get_db_config('db.cnf')
+conn = psycopg2.connect(database=dbname, user=user, password=password)
 cur = conn.cursor()
 INSERTSQL = "INSERT INTO emailcache (email, ds) VALUES (%s, %s);"
 
@@ -87,39 +91,21 @@ class EmailProcessor(object):
         return (headers, html, texts, images, videos, applications, stems)
 
 
-def main():
+def main(datadir):
     st = time.time()
     ep = EmailProcessor()
-    inputfiles = glob.glob('trec05p-1/data/*/*')
-    lex = defaultdict(int)
-    outfile = open('email.pkl', 'wb')
-
+    inputfiles = glob.glob(os.path.join(datadir, 'data/*/*'))
     for email in inputfiles:
-        print email
         data = ep.processemail(email)
-        #parsedemail[email] = data
-        #cur.execute(INSERTSQL, (email.replace('trec05p-1/', ''), repr(data)))
-        #conn.commit()
-        stems = data[-1]
-        uniquestems = set(stems)
-        for stem in uniquestems:
-            lex[stem] = lex[stem] + 1
-    for key, value in lex.items():
-        if value<=1:
-            del lex[key]
-    #pickle.dump(parsedemail, outfile)
-    pickle.dump(lex, outfile)
-    outfile.close()
-    print len(lex)
+        cur.execute(INSERTSQL, (email.split('trec05p-1/')[-1], repr(data)))
+        conn.commit()
     print time.time() - st    
         
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        ep = EmailProcessor()
-        import pprint
-        pprint.pprint(ep.processemail(sys.argv[1]))
-    else:    
-        main()
+    parser = ArgumentParser()
+    parser.add_argument("datadir", help="The untarred trec data directory for example /path/to/trec05p-1")
+    args = parser.parse_args()
+    if args.datadir:
+        main(args.datadir)

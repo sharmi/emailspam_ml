@@ -6,7 +6,7 @@ def extract(email):
     headers =  {}
     prevheader = None
     boundary_set = False
-    boundary_value = '';
+    boundary = '';
     for index, line in enumerate(data):
         if boundary_set:
             if boundary in line:

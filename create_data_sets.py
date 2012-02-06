@@ -1,8 +1,9 @@
 import random
+from argparse import ArgumentParser
 import os
 
-def create_datasets(filename):
-    data = open(filename).readlines()
+def create_datasets(datadir):
+    data = open(os.path.join(filename,'full/index')).readlines()
     spam = [line for line in data if line.startswith('spam')]
     ham = [line for line in data if line.startswith('ham')]
     random.shuffle(spam)
@@ -10,16 +11,17 @@ def create_datasets(filename):
     test = spam[:1000] + ham[:1000]
     validation = spam[1000:2000] + ham[1000:2000]
     training = spam[2000:] + ham[2000:]
-    create_files(test, validation, training, 'datasets')
+    create_files(datadir, test, validation, training, 'datasets')
 
 def writelines(filename, data):
     outfile = open(filename, 'w')
     outfile.writelines(data)
     outfile.close()
 
-def create_files(test, validation, training, folder):
-    if not os.path.exists('datasets'):    
-        os.mkdir('datasets')
+def create_files(datadir, test, validation, training, folder):
+    datasets = os.path.join(datadir, folder)
+    if not os.path.exists(datasets):    
+        os.mkdir(datasets)
     writelines(os.path.join(folder, 'test'), test)
     writelines(os.path.join(folder, 'validation'), validation)
     writelines(os.path.join(folder, 'supervised'), training)
@@ -28,4 +30,8 @@ def create_files(test, validation, training, folder):
 
     
 if __name__ == "__main__":
-    create_datasets('trec05p-1/full/index')
+    parser = ArgumentParser()
+    parser.add_argument("datadir", help="The untarred trec data directory for example /path/to/trec05p-1")
+    args = parser.parse_args()
+    if args.datadir:
+        create_datasets(datadir)

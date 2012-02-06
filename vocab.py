@@ -1,4 +1,3 @@
-from supervisor_learn import load_vocab
 import re
 from optparse import OptionParser
 from collections import defaultdict
@@ -7,6 +6,7 @@ import psycopg2
 import psycopg2.extensions
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
+from dbconfig import get_db_config
 
 emailre = re.compile('[a-zA-Z0-9+_\-\.]+@[0-9a-zA-Z][.-0-9a-zA-Z]*.[a-zA-Z]+', re.I)
 urlre = re.compile('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', re.I)
@@ -15,7 +15,8 @@ count_num = 0
 count_email = 0
 count_url = 0
 
-conn = psycopg2.connect(database="ml", user="sharmi", password="sherlock")
+user, password, dbname = get_db_config('db.cnf')
+conn = psycopg2.connect(database=dbname, user=user, password=password)
 cur = conn.cursor()
 SELECTSQL = "SELECT ds from  emailcache where email=%s;"
 def analyse_vocab(vocab):
@@ -47,9 +48,9 @@ def create_vocab(emails):
         stems = set(data[-1])
         for stem in stems:
             lex[stem] = lex[stem] + 1
-        for key in lex.keys():
-            if lex[key] < 2:
-                del lex[key]
+    for key in lex.keys():
+        if lex[key] < 2:
+            del lex[key]
 
     return reduce_vocab(lex)
     
